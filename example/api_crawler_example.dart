@@ -8,10 +8,7 @@ class PubPageListModel {
   final String? nextUrl;
   final List<PackageItem> packages;
 
-  const PubPageListModel({
-    this.nextUrl,
-    this.packages = const [],
-  });
+  const PubPageListModel({this.nextUrl, this.packages = const []});
 
   Map<String, dynamic> toJson() => {
     'next_url': nextUrl,
@@ -35,10 +32,7 @@ class PackageDetailModel {
 
   const PackageDetailModel({required this.name, this.latestVersion});
 
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'latest': latestVersion,
-  };
+  Map<String, dynamic> toJson() => {'name': name, 'latest': latestVersion};
 }
 
 /// 包列表模型解析器
@@ -66,7 +60,8 @@ class PackageDetailModelParser extends ModelParser<PackageDetailModel> {
   PackageDetailModel fromJson(Map<String, dynamic> json) {
     return PackageDetailModel(
       name: json['name'] as String,
-      latestVersion: (json['latest'] as Map<String, dynamic>?)?['version'] as String?,
+      latestVersion:
+          (json['latest'] as Map<String, dynamic>?)?['version'] as String?,
     );
   }
 
@@ -100,6 +95,9 @@ Future<void> main() async {
     await outFile.delete();
   }
 
+  // 创建控制器
+  final controller = CrawlerController();
+
   // 创建模型解析器
   final detailModelParser = PackageDetailModelParser();
   final packageItemParser = PackageItemModelParser();
@@ -117,7 +115,9 @@ Future<void> main() async {
     modelParser: detailModelParser,
   );
 
-  await crawlApis(
+  // 启动爬虫任务
+  final crawlerFuture = crawlApis(
+    controller: controller,
     seeds: [ApiCall(url: Uri.parse('https://pub.dev/api/packages?page=771'))],
     parse: (response) async {
       return MultiParser([listParser, detailParser]).parse(response);
@@ -136,6 +136,17 @@ Future<void> main() async {
         mode: FileMode.append,
         flush: true,
       );
+
+      controller.stop();
     },
   );
+
+  // 示例：10秒后主动停止爬虫
+  // Timer(const Duration(seconds: 10), () {
+  //   print('主动停止爬虫...');
+  //   controller.stop();
+  // });
+
+  await crawlerFuture;
+  print('爬虫完成');
 }

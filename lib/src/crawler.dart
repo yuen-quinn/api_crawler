@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:http/http.dart' as http;
 
 import 'config.dart';
+import 'crawler_controller.dart';
 import 'http_client.dart';
 import 'logger.dart';
 import 'types.dart';
@@ -13,7 +14,9 @@ import 'utils.dart';
 ///
 /// 示例：
 /// ```dart
+/// final controller = CrawlerController();
 /// await crawlApis(
+///   controller: controller,
 ///   seeds: [ApiCall(url: Uri.parse('https://api.example.com/users?page=1'))],
 ///   parse: (res) async {
 ///     final data = res.json() as Map<String, dynamic>;
@@ -32,6 +35,7 @@ import 'utils.dart';
 /// );
 /// ```
 Future<void> crawlApis({
+  CrawlerController? controller,
   required List<ApiCall> seeds,
   required ParseFn parse,
   CrawlOptions options = const CrawlOptions(),
@@ -39,6 +43,7 @@ Future<void> crawlApis({
 }) async {
   if (seeds.isEmpty) return;
 
+  controller ??= CrawlerController();
   final client = http.Client();
   final queue = ListQueue<QueueEntry>();
   final seen = <String>{};
@@ -61,14 +66,19 @@ Future<void> crawlApis({
   final concurrency = options.concurrency.clamp(1, 64);
 
   for (var i = 0; i < concurrency; i++) {
+    final workerCompleter = Completer<void>();
+    controller.addWorker(workerCompleter);
+    
     workers.add(
       workerLoop(
+        controller: controller,
         client: client,
         queue: queue,
         options: options,
         parse: parse,
         enqueue: enqueue,
         onItem: onItem,
+        completer: workerCompleter,
       ),
     );
   }
@@ -79,56 +89,68 @@ Future<void> crawlApis({
 
 /// 工作循环
 Future<void> workerLoop({
+  required CrawlerController controller,
   required http.Client client,
   required ListQueue<QueueEntry> queue,
   required CrawlOptions options,
   required ParseFn parse,
   required void Function(ApiCall call, {int retries}) enqueue,
   required Future<void> Function(Object? item) onItem,
+  required Completer<void> completer,
 }) async {
-  while (true) {
-    if (queue.isEmpty) return;
-
-    final entry = queue.removeFirst();
-    final call = entry.call;
-
-    try {
-      if (options.perRequestDelay > Duration.zero) {
-        await Future<void>.delayed(options.perRequestDelay);
+  try {
+    while (!controller.shouldStop) {
+      if (queue.isEmpty) {
+        // 等待一小段时间，避免 CPU 占用过高
+        await Future.delayed(const Duration(milliseconds: 100));
+        continue;
       }
 
-      if (options.logRequests) {
-        options.logger.log('[REQ] ${call.method.toUpperCase()} ${call.url}', LogLevel.debug);
-      }
+      final entry = queue.removeFirst();
+      final call = entry.call;
 
-      final response = await doRequest(client, call);
+      try {
+        if (options.perRequestDelay > Duration.zero) {
+          await Future<void>.delayed(options.perRequestDelay);
+        }
 
-      if (options.logResponses) {
-        options.logger.log(
-          '[RES] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
-          LogLevel.debug,
-        );
-      }
+        if (options.logRequests) {
+          options.logger.log('[REQ] ${call.method.toUpperCase()} ${call.url}', LogLevel.debug);
+        }
 
-      if (response.statusCode != 200) {
-        options.logger.log(
-          '[ERR] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
-          LogLevel.error,
-        );
-        return;
-      }
-      final parsed = await parse(response);
+        final response = await doRequest(client, call);
 
-      for (final item in parsed.items) {
-        await onItem(item);
+        if (options.logResponses) {
+          options.logger.log(
+            '[RES] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
+            LogLevel.debug,
+          );
+        }
+
+        if (response.statusCode != 200) {
+          options.logger.log(
+            '[ERR] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
+            LogLevel.error,
+          );
+          return;
+        }
+        final parsed = await parse(response);
+
+        for (final item in parsed.items) {
+          await onItem(item);
+        }
+        for (final nextCall in parsed.next) {
+          enqueue(nextCall);
+        }
+      } catch (_) {
+        if (entry.retries < options.maxRetries) {
+          enqueue(call, retries: entry.retries + 1);
+        }
       }
-      for (final nextCall in parsed.next) {
-        enqueue(nextCall);
-      }
-    } catch (_) {
-      if (entry.retries < options.maxRetries) {
-        enqueue(call, retries: entry.retries + 1);
-      }
+    }
+  } finally {
+    if (!completer.isCompleted) {
+      completer.complete();
     }
   }
 }
