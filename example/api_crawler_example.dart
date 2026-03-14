@@ -17,8 +17,6 @@ Future<void> main() async {
   await crawlApis(
     seeds: [ApiCall(url: Uri.parse('https://pub.dev/api/packages?page=1'))],
     parse: (response) async {
-      
-
       final uri = response.call.url;
       final data = response.json();
 
@@ -58,7 +56,7 @@ Future<void> main() async {
       return ParseResult(items: items, next: nextCalls);
     },
     options: const CrawlOptions(
-      concurrency: 2, 
+      concurrency: 2,
       maxRetries: 2,
       logRequests: true,
       logResponses: true,
@@ -66,8 +64,11 @@ Future<void> main() async {
     ),
     onItem: (item) async {
       // 逐行写入 JSONL 文件，便于后续分析
-      await outFile.writeAsString('${jsonEncode(item)}\n',
-          mode: FileMode.append, flush: true);
+      await outFile.writeAsString(
+        '${jsonEncode(item)}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
     },
   );
 }
