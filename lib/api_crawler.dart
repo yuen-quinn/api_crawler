@@ -1,5 +1,7 @@
 library api_crawler;
 
+export 'src/models.dart';
+
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
