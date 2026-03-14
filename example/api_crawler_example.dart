@@ -17,9 +17,7 @@ Future<void> main() async {
   await crawlApis(
     seeds: [ApiCall(url: Uri.parse('https://pub.dev/api/packages?page=1'))],
     parse: (response) async {
-      if (response.statusCode != 200) {
-        return const ParseResult();
-      }
+      
 
       final uri = response.call.url;
       final data = response.json();

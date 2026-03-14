@@ -66,10 +66,7 @@ class ParseResult {
   final List<Object?> items;
   final List<ApiCall> next;
 
-  const ParseResult({
-    this.items = const [],
-    this.next = const [],
-  });
+  const ParseResult({this.items = const [], this.next = const []});
 }
 
 /// 解析函数：从响应中解析数据，并决定下一步要请求什么。
@@ -128,14 +125,16 @@ Future<void> crawlApis({
   final concurrency = options.concurrency.clamp(1, 64);
 
   for (var i = 0; i < concurrency; i++) {
-    workers.add(_workerLoop(
-      client: client,
-      queue: queue,
-      options: options,
-      parse: parse,
-      enqueue: enqueue,
-      onItem: onItem,
-    ));
+    workers.add(
+      _workerLoop(
+        client: client,
+        queue: queue,
+        options: options,
+        parse: parse,
+        enqueue: enqueue,
+        onItem: onItem,
+      ),
+    );
   }
 
   await Future.wait(workers);
@@ -169,10 +168,16 @@ Future<void> _workerLoop({
       final response = await _doRequest(client, call);
 
       if (options.logResponses) {
-        // ignore: avoid_print
         print(
           '[RES] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
         );
+      }
+
+      if (response.statusCode != 200) {
+        print(
+          '[ERR] ${response.statusCode} ${call.method.toUpperCase()} ${call.url}',
+        );
+        return;
       }
       final parsed = await parse(response);
 
@@ -212,8 +217,7 @@ Future<ApiResponse> _doRequest(http.Client client, ApiCall call) async {
       raw = await client.delete(url, headers: call.headers, body: call.body);
       break;
     default:
-      final req = http.Request(method, url)
-        ..headers.addAll(call.headers);
+      final req = http.Request(method, url)..headers.addAll(call.headers);
       if (call.body != null) {
         if (call.body is List<int>) {
           req.bodyBytes = call.body as List<int>;
