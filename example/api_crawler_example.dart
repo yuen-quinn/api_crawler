@@ -126,8 +126,9 @@ Future<void> main() async {
       concurrency: 2,
       maxRetries: 2,
       logRequests: true,
-      logResponses: true,
+      logResponses: false,
       perRequestDelay: Duration(milliseconds: 2000),
+      logger: ConsoleLogger(LogLevel.debug),
     ),
     onItem: (item) async {
       await outFile.writeAsString(

@@ -1,4 +1,4 @@
-import 'package:api_crawler/api_crawler.dart';
+import 'types.dart';
 
 /// 抽象解析器基类
 abstract class ApiResponseParser<T> {
