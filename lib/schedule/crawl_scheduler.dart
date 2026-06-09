@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cron/cron.dart';
 
-import '../core/crawl_job.dart';
 import '../core/crawler.dart';
 import '../util/crawl_logging.dart';
 import 'crawl_schedule.dart';
